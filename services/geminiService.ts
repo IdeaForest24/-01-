@@ -1,6 +1,6 @@
-
 import { GoogleGenAI, Modality, Part } from "@google/genai";
 import { GeneratedImage } from '../types';
+import { STYLE_PRESETS } from "../constants/prompts";
 
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable is not set");
@@ -54,31 +54,41 @@ const generateImageWithPrompt = async (
 
 export const generateAdImages = async (
     base64Image: string,
-    mimeType: string
+    mimeType: string,
+    selectedStyleIds: string[],
+    imageCount: number
 ): Promise<GeneratedImage[]> => {
     const imagePart = fileToGenerativePart(base64Image, mimeType);
 
-    const prompts = [
-        {
-            prompt: "이 제품을 사용하여 전문적인 광고 이미지를 만들어 주세요. 제품이 돋보이도록 깨끗하고 미니멀한 스튜디오 배경을 추가해주세요.",
-            title: "미니멀리스트 스튜디오 샷",
-        },
-        {
-            prompt: "이 제품을 사용하여 역동적이고 눈길을 끄는 광고 이미지를 만들어 주세요. 활기찬 색상과 추상적인 요소가 있는 라이프스타일 배경에 제품을 배치해주세요.",
-            title: "역동적인 라이프스타일 샷",
-        },
-    ];
+    const promptsToRun: { prompt: string; title: string }[] = [];
+    const selectedStyles = STYLE_PRESETS.filter(style => selectedStyleIds.includes(style.id));
 
-    const imagePromises = prompts.map(({ prompt, title }) => 
+    selectedStyles.forEach(style => {
+      for (let i = 0; i < imageCount; i++) {
+        const title = imageCount > 1 ? `${style.name} #${i + 1}` : style.name;
+        promptsToRun.push({ prompt: style.prompt, title });
+      }
+    });
+
+    if (promptsToRun.length === 0) {
+        return [];
+    }
+
+    // Limit total generations to prevent long waits or excessive API calls.
+    if (promptsToRun.length > 10) {
+        throw new Error("한 번에 최대 10개의 이미지만 생성할 수 있습니다.");
+    }
+
+    const imagePromises = promptsToRun.map(({ prompt, title }) =>
         generateImageWithPrompt(imagePart, prompt, title)
     );
 
     const results = await Promise.all(imagePromises);
-    
+
     // Filter out any null results from failed generations
     const validResults = results.filter((result): result is GeneratedImage => result !== null);
 
-    if (validResults.length === 0) {
+    if (validResults.length === 0 && promptsToRun.length > 0) {
         throw new Error("모든 이미지 생성에 실패했습니다. API 키 또는 네트워크 연결을 확인해주세요.");
     }
 

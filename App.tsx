@@ -1,11 +1,13 @@
-
 import React, { useState, useCallback } from 'react';
 import { Header } from './components/Header';
 import { ImageUploader } from './components/ImageUploader';
 import { GeneratedImages } from './components/GeneratedImages';
 import { Spinner } from './components/Spinner';
+import { GenerationOptions } from './components/GenerationOptions';
 import { generateAdImages } from './services/geminiService';
 import { GeneratedImage } from './types';
+import { STYLE_PRESETS } from './constants/prompts';
+
 
 function App() {
   const [sourceFile, setSourceFile] = useState<File | null>(null);
@@ -13,6 +15,8 @@ function App() {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedStyles, setSelectedStyles] = useState<string[]>(['minimalist', 'lifestyle']);
+  const [imageCount, setImageCount] = useState<number>(1);
 
   const handleImageUpload = (file: File, preview: string) => {
     setSourceFile(file);
@@ -21,9 +25,27 @@ function App() {
     setError(null);
   };
 
+  const handleStyleChange = (styleId: string) => {
+    setSelectedStyles(prev =>
+      prev.includes(styleId)
+        ? prev.filter(id => id !== styleId)
+        : [...prev, styleId]
+    );
+  };
+
+  const handleImageCountChange = (count: number) => {
+    if (count >= 1 && count <= 4) {
+      setImageCount(count);
+    }
+  };
+
   const handleGenerateClick = useCallback(async () => {
     if (!sourceFile || !sourcePreview) {
       setError('먼저 이미지를 업로드해주세요.');
+      return;
+    }
+    if (selectedStyles.length === 0) {
+      setError('하나 이상의 스타일을 선택해주세요.');
       return;
     }
 
@@ -32,7 +54,7 @@ function App() {
     setGeneratedImages([]);
 
     try {
-      const results = await generateAdImages(sourcePreview, sourceFile.type);
+      const results = await generateAdImages(sourcePreview, sourceFile.type, selectedStyles, imageCount);
       setGeneratedImages(results);
     } catch (err) {
       console.error(err);
@@ -40,12 +62,12 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [sourceFile, sourcePreview]);
-  
+  }, [sourceFile, sourcePreview, selectedStyles, imageCount]);
+
   const CTAButton: React.FC = () => (
      <button
         onClick={handleGenerateClick}
-        disabled={!sourceFile || isLoading}
+        disabled={!sourceFile || isLoading || selectedStyles.length === 0}
         className="w-full sm:w-auto mt-6 px-8 py-4 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50"
       >
         {isLoading ? '생성 중...' : '광고 이미지 생성 ✨'}
@@ -61,6 +83,16 @@ function App() {
             제품 이미지를 업로드하고 Gemini Nano Banana API를 사용하여 전문가 수준의 광고용 이미지를 즉시 생성해보세요.
           </p>
           <ImageUploader onImageUpload={handleImageUpload} sourcePreview={sourcePreview} />
+
+          {sourceFile && (
+            <GenerationOptions
+              styles={STYLE_PRESETS}
+              selectedStyles={selectedStyles}
+              onStyleChange={handleStyleChange}
+              imageCount={imageCount}
+              onImageCountChange={handleImageCountChange}
+            />
+          )}
           
           <div className="text-center">
             <CTAButton />
